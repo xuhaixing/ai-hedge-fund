@@ -371,6 +371,8 @@ def _safe_get(df, field: str, col) -> float | None:
         return None
     if field not in df.index:
         return None
+    if col not in df.columns:
+        return None
     val = df.loc[field, col]
     if val is None or str(val) == "nan":
         return None

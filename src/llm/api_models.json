@@ -15,6 +15,21 @@
     "provider": "OpenAI"
   },
   {
+    "display_name": "DeepSeek V4 Pro(161)",
+    "model_name": "bailian/deepseek-v4-pro",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "claude-sonnet-4-6(161)",
+    "model_name": "claude-sonnet-4-6",
+    "provider": "OpenAI"
+  },
+  {
+    "display_name": "claude-opus-4-6(161)",
+    "model_name": "claude-opus-4-6",
+    "provider": "OpenAI"
+  },
+  {
     "display_name": "Kimi K2.6",
     "model_name": "kimi-k2.6",
     "provider": "Kimi"
