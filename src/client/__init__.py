@@ -1,8 +1,11 @@
+import logging
 import os
 
 from src.client.base import BaseClient
 from src.client.financial_datasets import FinancialDatasetsClient
 from src.client.yahoo import YahooFinanceClient
+
+logger = logging.getLogger(__name__)
 
 
 def get_client(source: str | None = None) -> BaseClient:
@@ -18,7 +21,9 @@ def get_client(source: str | None = None) -> BaseClient:
         source = os.environ.get("DATA_SOURCE", "yahoo")
 
     if source == "financial_datasets":
+        logger.info("Using data client: FinancialDatasetsClient (source=%s)", source)
         return FinancialDatasetsClient()
+    logger.info("Using data client: YahooFinanceClient (source=%s)", source)
     return YahooFinanceClient()
 
 

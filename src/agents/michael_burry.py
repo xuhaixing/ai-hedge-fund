@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from src.tools.api import (
     get_company_news,
-    get_financial_metrics,
+    _get_financial_metrics,
     get_insider_trades,
     get_market_cap,
     search_line_items,
@@ -47,7 +47,7 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
         # Fetch raw data
         # ------------------------------------------------------------------
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
+        metrics = _get_financial_metrics(ticker, end_date, period="ttm", limit=5)
 
         progress.update_status(agent_id, ticker, "Fetching line items")
         line_items = search_line_items(

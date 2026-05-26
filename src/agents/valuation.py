@@ -13,7 +13,7 @@ from src.graph.state import AgentState, show_agent_reasoning
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
 from src.tools.api import (
-    get_financial_metrics,
+    _get_financial_metrics,
     get_market_cap,
     search_line_items,
 )
@@ -31,7 +31,7 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
         progress.update_status(agent_id, ticker, "Fetching financial data")
 
         # --- Historical financial metrics ---
-        financial_metrics = get_financial_metrics(
+        financial_metrics = _get_financial_metrics(
             ticker=ticker,
             end_date=end_date,
             period="ttm",

@@ -1,6 +1,7 @@
 import logging
 
 import pandas as pd
+from langchain_core.tools import tool
 
 from src.client import get_client
 from src.data.cache import get_cache
@@ -35,14 +36,13 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     return prices
 
 
-def get_financial_metrics(
+def _get_financial_metrics(
     ticker: str,
     end_date: str,
     period: str = "ttm",
     limit: int = 10,
-    api_key: str = None,
 ) -> list[FinancialMetrics]:
-    """Fetch financial metrics from cache or data source."""
+    """Fetch financial metrics, returns typed FinancialMetrics objects for agent code."""
     cache_key = f"{ticker}_{period}_{end_date}_{limit}"
 
     if cached_data := _cache.get_financial_metrics(cache_key):
@@ -55,7 +55,33 @@ def get_financial_metrics(
         return []
 
     _cache.set_financial_metrics(cache_key, [m.model_dump() for m in financial_metrics])
+    logger.debug("get_financial_metrics(%s, %s, period=%s, limit=%s) => %s", ticker, end_date, period, limit, financial_metrics)
     return financial_metrics
+
+
+@tool
+def get_financial_metrics(
+    ticker: str,
+    end_date: str,
+    period: str = "ttm",
+    limit: int = 10,
+) -> list[dict]:
+    """Fetch key financial metrics for a stock ticker from cache or data source.
+
+    Args:
+        ticker: Stock ticker symbol, e.g. "NVDA", "AAPL".
+        end_date: Fetch metrics up to this date (inclusive), format "YYYY-MM-DD".
+        period: Reporting period. One of:
+            - "ttm"       Trailing Twelve Months (most recent rolling 12 months)
+            - "annual"    Annual financial statements (fixed fiscal year)
+            - "quarterly" Quarterly financial statements
+        limit: Maximum number of periods to return (default 10).
+
+    Returns:
+        List of financial metric records, each containing ratios such as
+        gross_margin, pe_ratio, debt_to_equity, revenue_growth, etc.
+    """
+    return [m.model_dump() for m in _get_financial_metrics(ticker, end_date, period, limit)]
 
 
 def search_line_items(

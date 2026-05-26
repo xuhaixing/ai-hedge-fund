@@ -11,7 +11,7 @@ import pandas as pd
 
 from src.tools.api import (
     get_company_news,
-    get_financial_metrics,
+    _get_financial_metrics,
     get_insider_trades,
     get_market_cap,
     get_prices,
@@ -48,7 +48,7 @@ def nassim_taleb_agent(state: AgentState, agent_id: str = "nassim_taleb_agent"):
         prices_df = prices_to_df(prices) if prices else pd.DataFrame()
 
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10, api_key=api_key)
+        metrics = _get_financial_metrics(ticker, end_date, period="ttm", limit=10)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         line_items = search_line_items(

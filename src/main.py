@@ -1,8 +1,9 @@
+import os
 import sys
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, START, StateGraph
 from colorama import Fore, Style, init
 import questionary
 from src.agents.portfolio_manager import portfolio_management_agent
@@ -20,9 +21,13 @@ import argparse
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import json
+import logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
+
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
 
 init(autoreset=True)
 
@@ -32,13 +37,13 @@ def parse_hedge_fund_response(response):
     try:
         return json.loads(response)
     except json.JSONDecodeError as e:
-        print(f"JSON decoding error: {e}\nResponse: {repr(response)}")
+        logger.error(f"JSON decoding error: {e}\nResponse: {repr(response)}")
         return None
     except TypeError as e:
-        print(f"Invalid response type (expected string, got {type(response).__name__}): {e}")
+        logger.error(f"Invalid response type (expected string, got {type(response).__name__}): {e}")
         return None
     except Exception as e:
-        print(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
+        logger.error(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
         return None
 
 
@@ -126,7 +131,7 @@ def create_workflow(selected_analysts=None):
     workflow.add_edge("risk_management_agent", "portfolio_manager")
     workflow.add_edge("portfolio_manager", END)
 
-    workflow.set_entry_point("start_node")
+    workflow.add_edge(START, "start_node")
     return workflow
 
 

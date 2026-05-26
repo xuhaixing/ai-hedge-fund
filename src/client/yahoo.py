@@ -83,20 +83,26 @@ class YahooFinanceClient(BaseClient):
         return prices
 
     def get_financial_metrics(
-        self, ticker: str, end_date: str, period: str = "ttm", limit: int = 10
+        self, ticker: str, end_date: str, period: str = "quarterly", limit: int = 10
     ) -> list[FinancialMetrics]:
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
-            income_stmt = stock.income_stmt
-            balance_sheet = stock.balance_sheet
-            cashflow = stock.cashflow
+            if period == "quarterly":
+                income_stmt = stock.quarterly_income_stmt
+                balance_sheet = stock.quarterly_balance_sheet
+                cashflow = stock.quarterly_cashflow
+            else:  # annual / ttm
+                income_stmt = stock.income_stmt
+                balance_sheet = stock.balance_sheet
+                cashflow = stock.cashflow
         except Exception as e:
             logger.warning("Failed to fetch financial data for %s: %s", ticker, e)
             return []
 
-        metrics_list = []
-        periods_to_use = income_stmt.columns[:limit] if not income_stmt.empty else []
+        # Collect raw data per period first, then compute growth metrics
+        raw_periods = []
+        periods_to_use = income_stmt.columns if not income_stmt.empty else []
 
         for col in periods_to_use:
             report_date = col.strftime("%Y-%m-%d") if hasattr(col, "strftime") else str(col)
@@ -108,6 +114,10 @@ class YahooFinanceClient(BaseClient):
             gross_profit = _safe_get(income_stmt, "Gross Profit", col)
             operating_income = _safe_get(income_stmt, "Operating Income", col)
             ebitda = _safe_get(income_stmt, "EBITDA", col)
+            cost_of_revenue = _safe_get(income_stmt, "Cost Of Revenue", col)
+            interest_expense = _safe_get(income_stmt, "Interest Expense", col)
+            shares = _safe_get(income_stmt, "Diluted Average Shares", col)
+            dividends_paid = _safe_get(cashflow, "Common Stock Dividend Paid", col)
 
             total_assets = _safe_get(balance_sheet, "Total Assets", col)
             total_equity = _safe_get(balance_sheet, "Stockholders Equity", col)
@@ -116,47 +126,130 @@ class YahooFinanceClient(BaseClient):
             current_liabilities = _safe_get(balance_sheet, "Current Liabilities", col)
             cash = _safe_get(balance_sheet, "Cash And Cash Equivalents", col)
             inventory = _safe_get(balance_sheet, "Inventory", col)
+            accounts_receivable = _safe_get(balance_sheet, "Accounts Receivable", col)
 
             operating_cf = _safe_get(cashflow, "Operating Cash Flow", col)
             capex = _safe_get(cashflow, "Capital Expenditure", col)
-            shares = _safe_get(income_stmt, "Diluted Average Shares", col)
 
             market_cap = info.get("marketCap")
             enterprise_value = info.get("enterpriseValue")
 
+            fcf = (operating_cf + capex) if operating_cf is not None and capex is not None else None
+
+            raw_periods.append({
+                "report_date": report_date,
+                "revenue": revenue,
+                "net_income": net_income,
+                "gross_profit": gross_profit,
+                "operating_income": operating_income,
+                "ebitda": ebitda,
+                "cost_of_revenue": cost_of_revenue,
+                "interest_expense": interest_expense,
+                "shares": shares,
+                "dividends_paid": dividends_paid,
+                "total_assets": total_assets,
+                "total_equity": total_equity,
+                "total_debt": total_debt,
+                "current_assets": current_assets,
+                "current_liabilities": current_liabilities,
+                "cash": cash,
+                "inventory": inventory,
+                "accounts_receivable": accounts_receivable,
+                "operating_cf": operating_cf,
+                "capex": capex,
+                "fcf": fcf,
+                "market_cap": market_cap,
+                "enterprise_value": enterprise_value,
+            })
+
+        metrics_list = []
+        for i, p in enumerate(raw_periods):
+            prev = raw_periods[i + 1] if i + 1 < len(raw_periods) else None
+
+            revenue = p["revenue"]
+            net_income = p["net_income"]
+            gross_profit = p["gross_profit"]
+            operating_income = p["operating_income"]
+            ebitda = p["ebitda"]
+            total_assets = p["total_assets"]
+            total_equity = p["total_equity"]
+            total_debt = p["total_debt"]
+            current_assets = p["current_assets"]
+            current_liabilities = p["current_liabilities"]
+            cash = p["cash"]
+            inventory = p["inventory"]
+            accounts_receivable = p["accounts_receivable"]
+            operating_cf = p["operating_cf"]
+            shares = p["shares"]
+            fcf = p["fcf"]
+            market_cap = p["market_cap"]
+            enterprise_value = p["enterprise_value"]
+            dividends_paid = p["dividends_paid"]
+            interest_expense = p["interest_expense"]
+            cost_of_revenue = p["cost_of_revenue"]
+
+            # Margins
             gross_margin = (gross_profit / revenue) if revenue and gross_profit else None
             operating_margin = (operating_income / revenue) if revenue and operating_income else None
             net_margin = (net_income / revenue) if revenue and net_income else None
+
+            # Returns
             roe = (net_income / total_equity) if total_equity and net_income else None
             roa = (net_income / total_assets) if total_assets and net_income else None
+            roic = (net_income / (total_equity + total_debt)) if total_equity and total_debt and net_income else None
 
+            # Liquidity
             current_ratio = (current_assets / current_liabilities) if current_liabilities and current_assets else None
             quick_ratio = ((current_assets - (inventory or 0)) / current_liabilities) if current_liabilities and current_assets else None
             cash_ratio = (cash / current_liabilities) if current_liabilities and cash else None
 
+            # Leverage
             debt_to_equity = (total_debt / total_equity) if total_equity and total_debt else None
             debt_to_assets = (total_debt / total_assets) if total_assets and total_debt else None
+            interest_coverage = (operating_income / abs(interest_expense)) if operating_income and interest_expense else None
 
-            fcf = (operating_cf + capex) if operating_cf is not None and capex is not None else None
-            fcf_yield = (fcf / market_cap) if fcf and market_cap else None
+            # Turnover
+            asset_turnover = (revenue / total_assets) if total_assets and revenue else None
+            inventory_turnover = (cost_of_revenue / inventory) if cost_of_revenue and inventory else None
+            receivables_turnover = (revenue / accounts_receivable) if revenue and accounts_receivable else None
+            days_sales_outstanding = (365 / receivables_turnover) if receivables_turnover else None
+            working_capital = (current_assets - current_liabilities) if current_assets and current_liabilities else None
+            working_capital_turnover = (revenue / working_capital) if revenue and working_capital else None
 
+            # Per share
             eps = (net_income / shares) if shares and net_income else None
             bvps = (total_equity / shares) if shares and total_equity else None
             fcf_per_share = (fcf / shares) if shares and fcf else None
 
-            pe_ratio = info.get("trailingPE") if metrics_list == [] else None
-            pb_ratio = info.get("priceToBook") if metrics_list == [] else None
-            ps_ratio = info.get("priceToSalesTrailing12Months") if metrics_list == [] else None
+            # Valuation — use market cap for historical periods instead of current-only info fields
+            fcf_yield = (fcf / market_cap) if fcf and market_cap else None
             ev_to_ebitda = (enterprise_value / ebitda) if enterprise_value and ebitda else None
             ev_to_revenue = (enterprise_value / revenue) if enterprise_value and revenue else None
+            pe_ratio = (market_cap / net_income) if market_cap and net_income and net_income > 0 else None
+            pb_ratio = (market_cap / total_equity) if market_cap and total_equity and total_equity > 0 else None
+            ps_ratio = (market_cap / revenue) if market_cap and revenue else None
 
-            interest_expense = _safe_get(income_stmt, "Interest Expense", col)
-            interest_coverage = (operating_income / abs(interest_expense)) if operating_income and interest_expense else None
+            # Payout ratio
+            payout_ratio = (abs(dividends_paid) / net_income) if dividends_paid and net_income and net_income > 0 else None
+
+            # Growth (period-over-period vs previous year)
+            def _growth(curr, prev_val):
+                if curr is not None and prev_val and prev_val != 0:
+                    return (curr - prev_val) / abs(prev_val)
+                return None
+
+            revenue_growth = _growth(revenue, prev["revenue"] if prev else None)
+            earnings_growth = _growth(net_income, prev["net_income"] if prev else None)
+            book_value_growth = _growth(total_equity, prev["total_equity"] if prev else None)
+            eps_growth = _growth(eps, (prev["net_income"] / prev["shares"]) if prev and prev["shares"] and prev["net_income"] else None)
+            fcf_growth = _growth(fcf, prev["fcf"] if prev else None)
+            operating_income_growth = _growth(operating_income, prev["operating_income"] if prev else None)
+            ebitda_growth = _growth(ebitda, prev["ebitda"] if prev else None)
 
             metrics_list.append(FinancialMetrics(
                 ticker=ticker,
-                report_period=report_date,
-                period="annual",
+                report_period=p["report_date"],
+                period="quarterly" if period == "quarterly" else "annual",
                 currency="USD",
                 market_cap=market_cap,
                 enterprise_value=enterprise_value,
@@ -166,19 +259,19 @@ class YahooFinanceClient(BaseClient):
                 enterprise_value_to_ebitda_ratio=ev_to_ebitda,
                 enterprise_value_to_revenue_ratio=ev_to_revenue,
                 free_cash_flow_yield=fcf_yield,
-                peg_ratio=info.get("pegRatio") if metrics_list == [] else None,
+                peg_ratio=info.get("pegRatio") if i == 0 else None,
                 gross_margin=gross_margin,
                 operating_margin=operating_margin,
                 net_margin=net_margin,
                 return_on_equity=roe,
                 return_on_assets=roa,
-                return_on_invested_capital=None,
-                asset_turnover=(revenue / total_assets) if total_assets and revenue else None,
-                inventory_turnover=None,
-                receivables_turnover=None,
-                days_sales_outstanding=None,
+                return_on_invested_capital=roic,
+                asset_turnover=asset_turnover,
+                inventory_turnover=inventory_turnover,
+                receivables_turnover=receivables_turnover,
+                days_sales_outstanding=days_sales_outstanding,
                 operating_cycle=None,
-                working_capital_turnover=None,
+                working_capital_turnover=working_capital_turnover,
                 current_ratio=current_ratio,
                 quick_ratio=quick_ratio,
                 cash_ratio=cash_ratio,
@@ -186,20 +279,23 @@ class YahooFinanceClient(BaseClient):
                 debt_to_equity=debt_to_equity,
                 debt_to_assets=debt_to_assets,
                 interest_coverage=interest_coverage,
-                revenue_growth=info.get("revenueGrowth") if metrics_list == [] else None,
-                earnings_growth=info.get("earningsGrowth") if metrics_list == [] else None,
-                book_value_growth=None,
-                earnings_per_share_growth=None,
-                free_cash_flow_growth=None,
-                operating_income_growth=None,
-                ebitda_growth=None,
-                payout_ratio=info.get("payoutRatio") if metrics_list == [] else None,
+                revenue_growth=revenue_growth,
+                earnings_growth=earnings_growth,
+                book_value_growth=book_value_growth,
+                earnings_per_share_growth=eps_growth,
+                free_cash_flow_growth=fcf_growth,
+                operating_income_growth=operating_income_growth,
+                ebitda_growth=ebitda_growth,
+                payout_ratio=payout_ratio,
                 earnings_per_share=eps,
                 book_value_per_share=bvps,
                 free_cash_flow_per_share=fcf_per_share,
             ))
 
-        return metrics_list[:limit]
+            if len(metrics_list) >= limit:
+                break
+
+        return metrics_list
 
     def search_line_items(
         self, ticker: str, line_items: list[str], end_date: str, period: str = "ttm", limit: int = 10

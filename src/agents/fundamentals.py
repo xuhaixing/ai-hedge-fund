@@ -4,7 +4,7 @@ from src.utils.api_key import get_api_key_from_state
 from src.utils.progress import progress
 import json
 
-from src.tools.api import get_financial_metrics
+from src.tools.api import _get_financial_metrics
 
 
 ##### Fundamental Agent #####
@@ -21,7 +21,7 @@ def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
 
         # Get the financial metrics
-        financial_metrics = get_financial_metrics(
+        financial_metrics = _get_financial_metrics(
             ticker=ticker,
             end_date=end_date,
             period="ttm",
