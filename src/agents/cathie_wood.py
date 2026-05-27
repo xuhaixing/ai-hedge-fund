@@ -1,5 +1,5 @@
 from src.graph.state import AgentState, show_agent_reasoning
-from src.tools.api import _get_financial_metrics, get_market_cap, search_line_items
+from src.tools.api import _get_financial_metrics, get_market_cap, _search_line_items
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
@@ -7,7 +7,6 @@ import json
 from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
-from src.utils.api_key import get_api_key_from_state
 
 
 class CathieWoodSignal(BaseModel):
@@ -27,7 +26,6 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     cw_analysis = {}
 
@@ -37,7 +35,7 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         # Request multiple periods of data (annual or TTM) for a more robust view.
-        financial_line_items = search_line_items(
+        financial_line_items = _search_line_items(
             ticker,
             [
                 "revenue",
@@ -56,11 +54,10 @@ def cathie_wood_agent(state: AgentState, agent_id: str = "cathie_wood_agent"):
             end_date,
             period="annual",
             limit=5,
-            api_key=api_key,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date)
 
         progress.update_status(agent_id, ticker, "Analyzing disruptive potential")
         disruptive_analysis = analyze_disruptive_potential(metrics, financial_line_items)

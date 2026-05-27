@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 _cache = get_cache()
 
 
-def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
+def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
     """Fetch price data from cache or data source."""
     cache_key = f"{ticker}_{start_date}_{end_date}"
 
@@ -84,17 +84,44 @@ def get_financial_metrics(
     return [m.model_dump() for m in _get_financial_metrics(ticker, end_date, period, limit)]
 
 
+def _search_line_items(
+    ticker: str,
+    line_items: list[str],
+    end_date: str,
+    period: str = "ttm",
+    limit: int = 10,
+) -> list[LineItem]:
+    """Fetch line items, returns typed LineItem objects for agent code."""
+    client = get_client()
+    return client.search_line_items(ticker, line_items, end_date, period, limit)
+
+
+@tool
 def search_line_items(
     ticker: str,
     line_items: list[str],
     end_date: str,
     period: str = "ttm",
     limit: int = 10,
-    api_key: str = None,
-) -> list[LineItem]:
-    """Fetch line items from data source."""
-    client = get_client()
-    return client.search_line_items(ticker, line_items, end_date, period, limit)
+) -> list[dict]:
+    """Search and fetch specific financial line items for a stock ticker.
+
+    Args:
+        ticker: Stock ticker symbol, e.g. "NVDA", "AAPL".
+        line_items: List of financial line item names to retrieve, e.g.
+            ["revenue", "net_income", "free_cash_flow", "total_debt",
+             "capital_expenditure", "earnings_per_share"].
+        end_date: Fetch data up to this date (inclusive), format "YYYY-MM-DD".
+        period: Reporting period. One of:
+            - "ttm"       Trailing Twelve Months
+            - "annual"    Annual financial statements
+            - "quarterly" Quarterly financial statements
+        limit: Maximum number of periods to return (default 10).
+
+    Returns:
+        List of line item records keyed by the requested field names.
+    """
+    return [item.model_dump() for item in _search_line_items(ticker, line_items, end_date, period, limit)]
 
 
 def get_insider_trades(
@@ -102,7 +129,6 @@ def get_insider_trades(
     end_date: str,
     start_date: str | None = None,
     limit: int = 1000,
-    api_key: str = None,
 ) -> list[InsiderTrade]:
     """Fetch insider trades from cache or data source."""
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
@@ -125,7 +151,6 @@ def get_company_news(
     end_date: str,
     start_date: str | None = None,
     limit: int = 1000,
-    api_key: str = None,
 ) -> list[CompanyNews]:
     """Fetch company news from cache or data source."""
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
@@ -146,7 +171,6 @@ def get_company_news(
 def get_market_cap(
     ticker: str,
     end_date: str,
-    api_key: str = None,
 ) -> float | None:
     """Fetch market cap from data source."""
     client = get_client()
@@ -165,6 +189,6 @@ def prices_to_df(prices: list[Price]) -> pd.DataFrame:
     return df
 
 
-def get_price_data(ticker: str, start_date: str, end_date: str, api_key: str = None) -> pd.DataFrame:
-    prices = get_prices(ticker, start_date, end_date, api_key=api_key)
+def get_price_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
+    prices = get_prices(ticker, start_date, end_date)
     return prices_to_df(prices)

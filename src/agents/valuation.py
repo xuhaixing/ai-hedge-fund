@@ -11,11 +11,10 @@ import statistics
 from langchain_core.messages import HumanMessage
 from src.graph.state import AgentState, show_agent_reasoning
 from src.utils.progress import progress
-from src.utils.api_key import get_api_key_from_state
 from src.tools.api import (
     _get_financial_metrics,
     get_market_cap,
-    search_line_items,
+    _search_line_items,
 )
 
 def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analyst_agent"):
@@ -24,7 +23,6 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
     data = state["data"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     valuation_analysis: dict[str, dict] = {}
 
     for ticker in tickers:
@@ -36,7 +34,6 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
             end_date=end_date,
             period="ttm",
             limit=8,
-            api_key=api_key,
         )
         if not financial_metrics:
             progress.update_status(agent_id, ticker, "Failed: No financial metrics found")
@@ -45,7 +42,7 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
 
         # --- Enhanced line‑items ---
         progress.update_status(agent_id, ticker, "Gathering comprehensive line items")
-        line_items = search_line_items(
+        line_items = _search_line_items(
             ticker=ticker,
             line_items=[
                 "free_cash_flow",
@@ -64,7 +61,6 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
             end_date=end_date,
             period="ttm",
             limit=8,
-            api_key=api_key,
         )
         if len(line_items) < 2:
             progress.update_status(agent_id, ticker, "Failed: Insufficient financial line items")
@@ -136,7 +132,7 @@ def valuation_analyst_agent(state: AgentState, agent_id: str = "valuation_analys
         # ------------------------------------------------------------------
         # Aggregate & signal
         # ------------------------------------------------------------------
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date)
         if not market_cap:
             progress.update_status(agent_id, ticker, "Failed: Market cap unavailable")
             continue

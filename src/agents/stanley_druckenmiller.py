@@ -2,7 +2,7 @@ from src.graph.state import AgentState, show_agent_reasoning
 from src.tools.api import (
     _get_financial_metrics,
     get_market_cap,
-    search_line_items,
+    _search_line_items,
     get_insider_trades,
     get_company_news,
     get_prices,
@@ -15,7 +15,6 @@ from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
 import statistics
-from src.utils.api_key import get_api_key_from_state
 
 class StanleyDruckenmillerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -37,7 +36,6 @@ def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druc
     start_date = data["start_date"]
     end_date = data["end_date"]
     tickers = data["tickers"]
-    api_key = get_api_key_from_state(state, "FINANCIAL_DATASETS_API_KEY")
     analysis_data = {}
     druck_analysis = {}
 
@@ -51,7 +49,7 @@ def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druc
         #   - Valuation: net_income, free_cash_flow, ebit, ebitda
         #   - Leverage: total_debt, shareholders_equity
         #   - Liquidity: cash_and_equivalents
-        financial_line_items = search_line_items(
+        financial_line_items = _search_line_items(
             ticker,
             [
                 "revenue",
@@ -72,20 +70,19 @@ def stanley_druckenmiller_agent(state: AgentState, agent_id: str = "stanley_druc
             end_date,
             period="annual",
             limit=5,
-            api_key=api_key,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
-        market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+        market_cap = get_market_cap(ticker, end_date)
 
         progress.update_status(agent_id, ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date, limit=50, api_key=api_key)
+        insider_trades = get_insider_trades(ticker, end_date, limit=50)
 
         progress.update_status(agent_id, ticker, "Fetching company news")
-        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
+        company_news = get_company_news(ticker, end_date, limit=50)
 
         progress.update_status(agent_id, ticker, "Fetching recent price data for momentum")
-        prices = get_prices(ticker, start_date=start_date, end_date=end_date, api_key=api_key)
+        prices = get_prices(ticker, start_date=start_date, end_date=end_date)
 
         progress.update_status(agent_id, ticker, "Analyzing growth & momentum")
         growth_momentum_analysis = analyze_growth_and_momentum(financial_line_items, prices)
